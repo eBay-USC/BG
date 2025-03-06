@@ -1,0 +1,156 @@
+[1741290400729] View confirmed friendship, userid:2 result: 0
+[1741290400767] Friend request sent from 0 -> 1
+[1741290400832] View pending friendship, userid:1 result: 0
+[1741290400845] View confirmed friendship, userid:0 result: 0
+[1741290400947] View pending friendship, userid:1 result: 0
+[1741290400970] Friend request sent from 0 -> 2
+[1741290401085] View pending friendship, userid:7 result: 0
+[1741290401145] View confirmed friendship, userid:3 result: 0
+[1741290401268] View confirmed friendship, userid:0 result: 0
+[1741290401432] View pending friendship, userid:2 result: 0
+[1741290401487] View pending friendship, userid:8 result: 0
+[1741290401538] View pending friendship, userid:0 result: 0
+[1741290401556] View confirmed friendship, userid:7 result: 0
+[1741290401578] View pending friendship, userid:0 result: 0
+[1741290401591] Friendship accepted failed! From 0 -> 1. One or both vertices not found.
+[1741290401625] View confirmed friendship, userid:7 result: 0
+[1741290401635] View confirmed friendship, userid:2 result: 0
+[1741290401654] View confirmed friendship, userid:0 result: 0
+[1741290401686] View confirmed friendship, userid:3 result: 0
+[1741290401839] View confirmed friendship, userid:3 result: 0
+[1741290401880] Friend request sent from 1 -> 9
+[1741290401965] Friend request sent from 0 -> 8
+[1741290402053] Friendship thawed from 0 -> 1
+[1741290402160] Friendship accepted failed! From 0 -> 2. One or both vertices not found.
+[1741290402470] Friend request sent from 2 -> 8
+[1741290402617] View pending friendship, userid:3 result: 0
+[1741290402684] View confirmed friendship, userid:9 result: 0
+[1741290402700] View confirmed friendship, userid:0 result: 0
+[1741290402835] Friend request sent from 2 -> 9
+[1741290402928] View pending friendship, userid:0 result: 0
+[1741290402955] View pending friendship, userid:3 result: 0
+[1741290402975] View pending friendship, userid:0 result: 0
+[1741290402994] View pending friendship, userid:1 result: 0
+[1741290403051] Friend request sent from 3 -> 1
+[1741290403084] View confirmed friendship, userid:4 result: 0
+[1741290403099] View confirmed friendship, userid:4 result: 0
+[1741290403130] View confirmed friendship, userid:0 result: 0
+[1741290403174] View pending friendship, userid:6 result: 0
+[1741290403231] Friend request sent from 7 -> 1
+[1741290403263] View confirmed friendship, userid:0 result: 0
+[1741290403267] Friend request sent from 1 -> 0
+[1741290403425] View confirmed friendship, userid:9 result: 0
+[1741290403513] View pending friendship, userid:2 result: 0
+[1741290403526] View confirmed friendship, userid:8 result: 0
+[1741290403533] Friendship thawed from 2 -> 0
+[1741290403540] Friend request sent from 1 -> 2
+[1741290403566] View confirmed friendship, userid:1 result: 0
+[1741290403624] View confirmed friendship, userid:8 result: 0
+[1741290403681] View pending friendship, userid:6 result: 0
+[1741290403702] Friend request sent from 0 -> 2
+[1741290403756] View confirmed friendship, userid:1 result: 0
+[1741290403777] View pending friendship, userid:6 result: 0
+[1741290403829] View pending friendship, userid:4 result: 0
+[1741290403878] View confirmed friendship, userid:5 result: 0
+[1741290403890] View pending friendship, userid:3 result: 0
+[1741290403934] View pending friendship, userid:1 result: 0
+[1741290403969] Friendship accepted failed! From 1 -> 0. One or both vertices not found.
+[1741290404006] View pending friendship, userid:8 result: 0
+[1741290404019] Friend request sent from 0 -> 3
+[1741290404031] View pending friendship, userid:0 result: 0
+[1741290404115] View confirmed friendship, userid:2 result: 0
+[1741290404147] View confirmed friendship, userid:5 result: 0
+[1741290404209] Friendship thawed from 0 -> 1
+[1741290404214] View pending friendship, userid:0 result: 0
+[1741290404235] View pending friendship, userid:4 result: 0
+[1741290404256] Friendship rejected failed! From 0 -> 2. Didn't find any pending -> rejected edges
+[1741290404308] View pending friendship, userid:0 result: 0
+[1741290404379] Friendship accepted failed! From 2 -> 9. One or both vertices not found.
+[1741290404385] View pending friendship, userid:3 result: 0
+[1741290404392] Friend request sent from 2 -> 0
+[1741290404483] View pending friendship, userid:2 result: 0
+[1741290404495] Friendship rejected failed! From 2 -> 0. Didn't find any pending -> rejected edges
+[1741290404557] View confirmed friendship, userid:0 result: 0
+[1741290404569] View pending friendship, userid:1 result: 0
+[1741290404597] Friend request sent from 0 -> 1
+[1741290404619] View pending friendship, userid:8 result: 0
+[1741290404692] View confirmed friendship, userid:6 result: 0
+[1741290404703] Friend request sent from 2 -> 6
+[1741290404727] View confirmed friendship, userid:2 result: 0
+[1741290404747] View pending friendship, userid:2 result: 0
+[1741290404753] Friendship thawed from 9 -> 2
+[1741290404772] View confirmed friendship, userid:1 result: 0
+[1741290404784] View confirmed friendship, userid:6 result: 0
+[1741290404845] View pending friendship, userid:0 result: 0
+[1741290404856] View confirmed friendship, userid:1 result: 0
+[1741290404896] Friend request sent from 6 -> 7
+[1741290404945] Friendship rejected failed! From 0 -> 3. Didn't find any pending -> rejected edges
+[1741290404960] Friend request sent from 1 -> 4
+[1741290404973] View pending friendship, userid:2 result: 0
+[1741290404994] Friend request sent from 9 -> 0
+[1741290405003] Friendship rejected failed! From 0 -> 1. Didn't find any pending -> rejected edges
+[1741290405042] View confirmed friendship, userid:2 result: 0
+[1741290405072] View pending friendship, userid:3 result: 0
+[1741290405130] Friend request sent from 4 -> 7
+[1741290405155] Friendship accepted failed! From 7 -> 1. One or both vertices not found.
+[1741290405186] View confirmed friendship, userid:2 result: 0
+[1741290405202] View confirmed friendship, userid:8 result: 0
+[1741290405209] View pending friendship, userid:3 result: 0
+[1741290405286] Friend request sent from 2 -> 3
+[1741290405298] Friendship accepted failed! From 2 -> 6. One or both vertices not found.
+[1741290405343] View confirmed friendship, userid:6 result: 0
+[1741290405369] View pending friendship, userid:3 result: 0
+[1741290405376] View confirmed friendship, userid:1 result: 0
+[1741290405389] View pending friendship, userid:1 result: 0
+[1741290405392] View pending friendship, userid:3 result: 0
+[1741290405394] View confirmed friendship, userid:8 result: 0
+[1741290405420] Friend request sent from 3 -> 4
+[1741290405428] View pending friendship, userid:0 result: 0
+[1741290405438] Friendship thawed from 7 -> 1
+[1741290405443] View confirmed friendship, userid:6 result: 0
+[1741290405452] Friendship accepted failed! From 2 -> 3. One or both vertices not found.
+[1741290405456] Friendship accepted failed! From 1 -> 9. One or both vertices not found.
+[1741290405466] Friendship rejected failed! From 9 -> 0. Didn't find any pending -> rejected edges
+[1741290405470] Friend request sent from 1 -> 0
+[1741290405481] View pending friendship, userid:4 result: 0
+[1741290405498] View confirmed friendship, userid:3 result: 0
+[1741290405625] View confirmed friendship, userid:9 result: 0
+[1741290405669] Friendship thawed from 2 -> 6
+[1741290405703] View confirmed friendship, userid:0 result: 0
+[1741290405716] View confirmed friendship, userid:0 result: 0
+[1741290405721] View pending friendship, userid:1 result: 0
+[1741290405727] View confirmed friendship, userid:8 result: 0
+[1741290405733] View confirmed friendship, userid:3 result: 0
+[1741290405757] View confirmed friendship, userid:7 result: 0
+[1741290405763] View confirmed friendship, userid:0 result: 0
+[1741290405783] View confirmed friendship, userid:6 result: 0
+[1741290405846] Friend request sent from 2 -> 0
+[1741290405874] View pending friendship, userid:0 result: 0
+[1741290405886] Friend request sent from 2 -> 4
+[1741290405897] Friendship accepted failed! From 2 -> 0. One or both vertices not found.
+[1741290405937] View confirmed friendship, userid:3 result: 0
+[1741290405950] View pending friendship, userid:0 result: 0
+[1741290405964] View pending friendship, userid:3 result: 0
+[1741290405971] View confirmed friendship, userid:0 result: 0
+[1741290405984] View pending friendship, userid:7 result: 0
+[1741290406012] Friendship thawed from 2 -> 3
+[1741290406024] Friendship thawed from 0 -> 2
+[1741290406033] View confirmed friendship, userid:3 result: 0
+[1741290406035] View pending friendship, userid:1 result: 0
+[1741290406042] Friendship accepted failed! From 3 -> 1. One or both vertices not found.
+[1741290406048] View confirmed friendship, userid:0 result: 0
+[1741290406063] Friendship accepted failed! From 1 -> 0. One or both vertices not found.
+[1741290406115] Friend request sent from 0 -> 6
+[1741290406127] View pending friendship, userid:0 result: 0
+[1741290406145] Friendship rejected failed! From 1 -> 2. Didn't find any pending -> rejected edges
+[1741290406165] Friendship thawed from 1 -> 0
+[1741290406175] View pending friendship, userid:0 result: 0
+[1741290406198] View confirmed friendship, userid:3 result: 0
+[1741290406230] View pending friendship, userid:9 result: 0
+[1741290406298] View pending friendship, userid:1 result: 0
+[1741290406308] View confirmed friendship, userid:1 result: 0
+[1741290406310] View pending friendship, userid:0 result: 0
+[1741290406317] View pending friendship, userid:2 result: 0
+[1741290406324] View pending friendship, userid:0 result: 0
+[1741290406331] Friend request sent from 9 -> 6
+[1741290406340] Friend request sent from 0 -> 7
