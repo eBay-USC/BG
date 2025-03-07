@@ -61,6 +61,31 @@ public class JanusGraphClient extends DB{
 	private GraphTraversalSource g;
 
 
+	private int runWithRetry(Runnable operation) {
+		for (int attempt = 1; attempt <= maxRetries; attempt++) {
+			try {
+				operation.run();
+				System.out.println("Success while executing operation, attempt " + attempt + "/" + maxRetries);
+				return SUCCESS;
+			} catch (Exception e) {
+				System.err.println("Error while executing operation, attempt " + attempt + "/" + maxRetries);
+				e.printStackTrace();
+				if (attempt < maxRetries) {
+					try {
+						Thread.sleep(sleepDuration);
+					} catch (InterruptedException ie) {
+						System.err.println("Sleep interrupted, aborting retries.");
+						ie.printStackTrace();
+						return ERROR;
+					}
+				} else {
+					return ERROR;
+				}
+			}
+		}
+		return ERROR;
+	}
+
 	@Override
 	public boolean init() throws DBException {
 		// todo: reload everything
@@ -219,55 +244,40 @@ public class JanusGraphClient extends DB{
 		}
 	}
 
-	//todo: add retry method separately
-
 	@Override
 	public int inviteFriend(int inviterID, int inviteeID){
-		for (int attempt = 1; attempt <= maxRetries; attempt++) {
-			try {
-				long timestamp = Instant.now().toEpochMilli(); // 毫秒级时间戳
-				g.V().hasLabel("users").has("userid", inviterID).as("inviter")
-						.V().hasLabel("users").has("userid", inviteeID).as("invitee")
-						.coalesce(__.select("inviter"), __.constant("Vertex with userid " + inviterID + " not found"))
-						.coalesce(__.select("invitee"), __.constant("Vertex with userid " + inviteeID + " not found"))
-						// if friendship edge exists and status is rejected
-						.sideEffect(
-								__.select("inviter")
-										.outE("friendship")
-										.where(__.inV().as("invitee"))
-										.has("status", "rejected")
-										.property("status", "pending")
-						)
-						// if friendship edge not exists
-						.choose(
-								__.select("inviter").outE("friendship").where(__.inV().as("invitee")),
-								__.identity(),
-								__.addE("friendship").from("inviter").to("invitee").property("status", "pending")
-						)
-						.iterate();
+		long timestamp = Instant.now().toEpochMilli(); // 毫秒级时间戳
+		Runnable operation = () -> {
+			g.V().hasLabel("users").has("userid", inviterID).as("inviter")
+					.V().hasLabel("users").has("userid", inviteeID).as("invitee")
+					.coalesce(__.select("inviter"), __.constant("Vertex with userid " + inviterID + " not found"))
+					.coalesce(__.select("invitee"), __.constant("Vertex with userid " + inviteeID + " not found"))
+					// if friendship edge exists and status is rejected
+					.sideEffect(
+							__.select("inviter")
+									.outE("friendship")
+									.where(__.inV().as("invitee"))
+									.has("status", "rejected")
+									.property("status", "pending")
+					)
+					// if friendship edge not exists
+					.choose(
+							__.select("inviter").outE("friendship").where(__.inV().as("invitee")),
+							__.identity(),
+							__.addE("friendship").from("inviter").to("invitee").property("status", "pending")
+					)
+					.iterate();
 
-				System.out.println("[" + timestamp + "] " + "Friend request sent from " + inviterID + " -> " + inviteeID);
-				return SUCCESS;
-			} catch (Exception e){
-				System.err.println("Error while inserting entity into graph: " );
-				e.printStackTrace();
-					// sleep 500 milliseconds and retry
-					try {
-						Thread.sleep(sleepDuration);
-					} catch (InterruptedException ie) {
-						ie.printStackTrace();
-						return ERROR;
-					}
-				}
-		}
-		// in theory, it won't end to this
-		return ERROR;
+			System.out.println("[" + timestamp + "] " + "Friend request sent from " + inviterID + " -> " + inviteeID + " [Thread id: " + Thread.currentThread().getId() + "]");
+		};
+
+		return runWithRetry(operation);
 	}
 
 	@Override
 	public int CreateFriendship(int friendid1, int friendid2) {
-		try {
-			long timestamp = Instant.now().toEpochMilli(); // 毫秒级时间戳
+		Runnable operation = () -> {
+			long timestamp = Instant.now().toEpochMilli();
 			g.V().hasLabel("users").has("userid", friendid1).as("inviter")
 					.V().hasLabel("users").has("userid", friendid2).as("invitee")
 					.coalesce(__.select("inviter"), __.constant("Vertex with userid " + friendid1 + " not found"))
@@ -276,20 +286,15 @@ public class JanusGraphClient extends DB{
 					.property("status", "friend")
 					.iterate();
 
-			System.out.println("[" + timestamp + "] " + "Friendship established from " + friendid1 + " -> " + friendid2);
-			return SUCCESS;
-		} catch (Exception e) {
-			System.err.println("Error while creating friendship");
-			e.printStackTrace();
-			return ERROR;
-		}
+			System.out.println("[" + timestamp + "] " + "Friendship established from " + friendid1 + " -> " + friendid2 + " [Thread id: " + Thread.currentThread().getId() + "]");
+		};
+		return runWithRetry(operation);
 	}
 
 	@Override
 	public int acceptFriend(int inviterID, int inviteeID) {
 		// change the status of inviter and invitee into confirmed.
-		for (int attempt = 1; attempt <= maxRetries; attempt++) {
-			try {
+		Runnable operation = () -> {
 				long timestamp = Instant.now().toEpochMilli(); // 毫秒级时间戳
 				Long count = g.V().hasLabel("users").has("userid", inviterID)
 						.outE("friendship").has("status", "pending")
@@ -299,36 +304,19 @@ public class JanusGraphClient extends DB{
 						.next();
 
 				if (count == 0) {
-					System.err.println("[" + timestamp + "] " + "Friendship accepted failed! From " + inviterID + " -> " + inviteeID + ". One or both vertices not found.");
-					return SUCCESS;
+					System.err.println("[" + timestamp + "] " + "Friendship accepted failed! From " + inviterID + " -> " + inviteeID + ". One or both vertices not found." + " [Thread id: " + Thread.currentThread().getId() + "]");
 				} else if (count == 1) {
-					System.out.println("[" + timestamp + "] " + "Friendship accepted from " + inviterID + " -> " + inviteeID);
+					System.out.println("[" + timestamp + "] " + "Friendship accepted from " + inviterID + " -> " + inviteeID + " [Thread id: " + Thread.currentThread().getId() + "]");
 				} else{
-					System.err.println("[" + timestamp + "] " + "Friendship accepted failed! From " + inviterID + " -> " + inviteeID + ". Multiple edges found.");
-					return SUCCESS;
+					System.err.println("[" + timestamp + "] " + "Friendship accepted failed! From " + inviterID + " -> " + inviteeID + ". Multiple edges found." + " [Thread id: " + Thread.currentThread().getId() + "]");
 				}
-				return SUCCESS;
-			} catch (Exception e) {
-				e.printStackTrace();
-				if (attempt == maxRetries) {
-					return ERROR;
-				} else {
-					try {
-						Thread.sleep(sleepDuration);
-					} catch (InterruptedException ie) {
-						ie.printStackTrace();
-						return ERROR;
-					}
-				}
-			}
-		}
-		return ERROR;
+			};
+		return runWithRetry(operation);
 	}
 
 	@Override
 	public int rejectFriend(int inviterID, int inviteeID) {
-		for (int attempt = 1; attempt <= maxRetries; attempt++) {
-			try {
+		Runnable operation = () -> {
 				long timestamp = Instant.now().toEpochMilli();
 				Long count = g.V().hasLabel("users").has("userid", inviterID)
 						.outE("friendship").has("status", "pending")
@@ -338,29 +326,14 @@ public class JanusGraphClient extends DB{
 						.next();
 
 				if (count == 0) {
-					System.err.println("[" + timestamp + "] " + "Friendship rejected failed! From " + inviterID + " -> " + inviteeID + ". Didn't find any pending -> rejected edges");
+					System.err.println("[" + timestamp + "] " + "Friendship rejected failed! From " + inviterID + " -> " + inviteeID + ". Didn't find any pending -> rejected edges" + " [Thread id: " + Thread.currentThread().getId() + "]");
 				} else if (count == 1) {
-					System.out.println("[" + timestamp + "] " + "Friendship rejected from " + inviterID + " -> " + inviteeID);
+					System.out.println("[" + timestamp + "] " + "Friendship rejected from " + inviterID + " -> " + inviteeID + " [Thread id: " + Thread.currentThread().getId() + "]");
 				} else{
-					System.err.println("[" + timestamp + "] " + "Friendship rejected failed! From " + inviterID + " -> " + inviteeID + ". Multiple edges found.");
-					return SUCCESS;
+					System.err.println("[" + timestamp + "] " + "Friendship rejected failed! From " + inviterID + " -> " + inviteeID + ". Multiple edges found." + " [Thread id: " + Thread.currentThread().getId() + "]");
 				}
-				return SUCCESS;
-			} catch (Exception e) {
-				e.printStackTrace();
-				if (attempt == maxRetries) {
-					return ERROR;
-				} else {
-					try {
-						Thread.sleep(sleepDuration);
-					} catch (InterruptedException ie) {
-						ie.printStackTrace();
-						return ERROR;
-					}
-				}
-			}
-		}
-		return ERROR;
+			};
+		return runWithRetry(operation);
 	}
 
 
@@ -396,7 +369,7 @@ public class JanusGraphClient extends DB{
 
 			result.put("pendingcount", new StringByteIterator(String.valueOf(pendingFriendCount)));
 			result.put("friendcount", new StringByteIterator(String.valueOf(friendCount)));
-			System.out.println("[" + timestamp + "] " + "View Profile: " + "userid: " + result.get("userid") +" pendingcount: " + result.get("pendingcount") +" friendcount: " + result.get("friendcount"));
+			System.out.println("[" + timestamp + "] " + "View Profile: " + "userid: " + result.get("userid") +" pendingcount: " + result.get("pendingcount") +" friendcount: " + result.get("friendcount") + " [Thread id: " + Thread.currentThread().getId() + "]");
 
 			return SUCCESS;
 		} catch (Exception e) {
@@ -407,32 +380,17 @@ public class JanusGraphClient extends DB{
 
 	@Override
 	public int thawFriendship(int friendid1, int friendid2) {
-		for (int attempt = 1; attempt <= maxRetries; attempt++) {
-			try {
-				long timestamp = Instant.now().toEpochMilli();
+		Runnable operation = () -> {
+			long timestamp = Instant.now().toEpochMilli();
 				g.V().hasLabel("users").has("userid", friendid1)
 						.bothE("friendship")
 						.has("status", "friend")
 						.where(__.otherV().hasLabel("users").has("userid", friendid2))
 						.drop()
 						.iterate();
-				System.out.println("[" + timestamp + "] " + "Friendship thawed from " + friendid1 + " -> " + friendid2);
-				return SUCCESS;
-			} catch (Exception e) {
-				e.printStackTrace();
-				if (attempt == maxRetries) {
-					return ERROR;
-				} else {
-					try {
-						Thread.sleep(sleepDuration);
-					} catch (InterruptedException ie) {
-						ie.printStackTrace();
-						return ERROR;
-					}
-				}
-			}
-		}
-		return ERROR;
+				System.out.println("[" + timestamp + "] " + "Friendship thawed from " + friendid1 + " -> " + friendid2 + " [Thread id: " + Thread.currentThread().getId() + "]");
+			};
+		return runWithRetry(operation);
 	}
 
 	@Override
@@ -474,7 +432,7 @@ public class JanusGraphClient extends DB{
 				}
 				result.add(friendMap);
 			}
-			System.out.println("[" + timestamp + "] " + "View confirmed friendship, userid:" + profileOwnerID + " result: " + result.size());
+			System.out.println("[" + timestamp + "] " + "View confirmed friendship, userid:" + profileOwnerID + " result: " + result.size() + " [Thread id: " + Thread.currentThread().getId() + "]");
 
 
 			return SUCCESS;
@@ -507,7 +465,7 @@ public class JanusGraphClient extends DB{
 				});
 				results.add(friendMap);
 			}
-			System.out.println("[" + timestamp + "] " + "View pending friendship, userid:" + profileOwnerID + " result: " + results.size());
+			System.out.println("[" + timestamp + "] " + "View pending friendship, userid:" + profileOwnerID + " result: " + results.size() + " [Thread id: " + Thread.currentThread().getId() + "]");
 
 			return SUCCESS;
 		} catch (Exception e) {
