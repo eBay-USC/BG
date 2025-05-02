@@ -27,9 +27,11 @@ import org.apache.tinkerpop.gremlin.driver.Client;
 import org.apache.tinkerpop.gremlin.driver.Cluster;
 import org.apache.tinkerpop.gremlin.driver.ResultSet;
 import org.apache.tinkerpop.gremlin.driver.remote.DriverRemoteConnection;
+import org.apache.tinkerpop.gremlin.process.traversal.Traversal;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversal;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSource;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.__;
+import org.apache.tinkerpop.gremlin.process.traversal.util.TraversalMetrics;
 import org.apache.tinkerpop.gremlin.structure.Vertex;
 import org.apache.tinkerpop.gremlin.structure.io.binary.TypeSerializerRegistry;
 import org.apache.tinkerpop.gremlin.util.ser.GraphBinaryMessageSerializerV1;
@@ -40,41 +42,123 @@ import java.nio.file.Paths;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Supplier;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.apache.tinkerpop.gremlin.process.traversal.AnonymousTraversalSource.traversal;
 
 public class JanusGraphClient extends DB{
+
+	public static class DefaultLoggableOperation implements LoggableOperation {
+		private final List<String> logs = new ArrayList<>();
+		private final Runnable task;
+		private final String operationId;
+
+		public DefaultLoggableOperation(String operationId, Runnable task) {
+			this.operationId = operationId;
+			this.task = task;
+		}
+
+		@Override
+		public void run() {
+			logs.clear(); // clear old logs
+			task.run();
+		}
+
+		@Override
+		public List<String> getLogs() {
+			return logs;
+		}
+
+		public void addLog(String log) {
+			logs.add(log);
+		}
+
+		public String getOperationId() {
+			return operationId;
+		}
+	}
+
+
 	/** The code to return when the call succeeds. **/
 	public static final int SUCCESS = 0;
 	/** The code to return when the call fails. **/
 	public static final int ERROR   = -1;
 	/** Retry times. **/
-	public static final int maxRetries = 5;
+	public static final int maxRetries = 10;
 	public static final long sleepDuration = 50;
+	public boolean cache = true;
 	private Properties props;
 	private static volatile Client sharedClient = null;
 	private static volatile GraphTraversalSource sharedG = null;
 	private static volatile boolean initialized = false;
 	private static final Object INIT_LOCK = new Object();
-
+	private static final Logger logger = Logger.getLogger(JanusGraphClient.class.getName());
 	private Client client;
 	private GraphTraversalSource g;
+	boolean showProfile = false;
+
+	private void logCacheMetrics(TraversalMetrics metrics) {
+		String metricStr = metrics.toString();
+		Pattern patternHits = Pattern.compile("_cacheHits=(\\d+)");
+		Pattern patternMisses = Pattern.compile("_cacheMisses=(\\d+)");
+		Pattern patternTmp = Pattern.compile("_template=([^\\n]+)");
+		Matcher matcherHits = patternHits.matcher(metricStr);
+		String cacheHits = matcherHits.find() ? matcherHits.group(1) : "N/A";
+		Matcher matcherMisses = patternMisses.matcher(metricStr);
+		Matcher matcherTemplate = patternTmp.matcher(metricStr);
+		String cacheMisses = matcherMisses.find() ? matcherMisses.group(1) : "N/A";
+		String template = matcherTemplate.find() ? matcherTemplate.group(1).trim() : "N/A";
+		String logMsg = "[Cache Metrics] Step: JanusGraphCacheStep"
+				+ ", CacheHits: " + cacheHits
+				+ ", CacheMisses: " + cacheMisses
+				+ ", Template: " + template;
+		logger.warning(logMsg);
+
+	}
+
+	private <T> List<T> runTraversalWithProfile(Supplier<Traversal<?, T>> querySupplier, boolean showProfile) {
+		List<T> results = querySupplier.get().toList();
+		if (showProfile) {
+			Traversal<?, TraversalMetrics> tProfile = querySupplier.get().profile();
+			List<TraversalMetrics> metricsList = tProfile.toList();
+			if (!metricsList.isEmpty()) {
+				TraversalMetrics metrics = metricsList.get(0);
+				logCacheMetrics(metrics);
+			} else {
+				logger.warning("No traversal metrics available.");
+			}
+		}
+		return results;
+	}
 
 
-	private int runWithRetry(Runnable operation) {
+	private int runWithRetry(DefaultLoggableOperation operation) {
+		String opId = operation.getOperationId();
 		for (int attempt = 1; attempt <= maxRetries; attempt++) {
 			try {
 				operation.run();
-				System.out.println("Success while executing operation, attempt " + attempt + "/" + maxRetries);
+				List<String> logs = operation.getLogs();
+				if (!logs.isEmpty()) {
+					if (attempt > 3) {
+						logger.warning(String.format("[Attempt %d/%d] [Thread %d] %s", attempt, maxRetries, Thread.currentThread().getId(), logs.get(0)));
+					} else {
+						logger.info(String.format("[Attempt %d/%d] [Thread %d] %s", attempt, maxRetries, Thread.currentThread().getId(), logs.get(0)));
+					}
+				}
 				return SUCCESS;
 			} catch (Exception e) {
-				System.err.println("Error while executing operation, attempt " + attempt + "/" + maxRetries);
-				e.printStackTrace();
+				logger.severe(String.format("[Operation %s] [Thread %d] Attempt %d/%d failed: %s",
+						opId, Thread.currentThread().getId(), attempt, maxRetries, e.getMessage()));
 				if (attempt < maxRetries) {
 					try {
 						Thread.sleep(sleepDuration);
 					} catch (InterruptedException ie) {
-						System.err.println("Sleep interrupted, aborting retries.");
+						logger.severe("Sleep interrupted, aborting retries.");
 						ie.printStackTrace();
 						return ERROR;
 					}
@@ -82,6 +166,7 @@ public class JanusGraphClient extends DB{
 					return ERROR;
 				}
 			}
+
 		}
 		return ERROR;
 	}
@@ -89,6 +174,9 @@ public class JanusGraphClient extends DB{
 	@Override
 	public boolean init() throws DBException {
 		// todo: reload everything
+		props = getProperties();
+		cache = Boolean.parseBoolean(props.getProperty("doCache", "true"));
+		logger.setLevel(Level.WARNING);
 		if (!initialized) {
 			synchronized (INIT_LOCK) {
 				if (!initialized) {
@@ -98,7 +186,7 @@ public class JanusGraphClient extends DB{
 								.create();
 
 						Cluster cluster = Cluster.build()
-								.addContactPoint("128.110.96.123")
+								.addContactPoint("128.110.96.75")
 								.port(8182)
 								.minConnectionPoolSize(10)
 								.maxConnectionPoolSize(100)
@@ -110,8 +198,7 @@ public class JanusGraphClient extends DB{
 
 						sharedClient = cluster.connect();
 						sharedG = traversal().withRemote(DriverRemoteConnection.using(cluster));
-
-						System.out.println("connected successfully in thread " + Thread.currentThread().getName());
+						logger.info("connected successfully in thread " + Thread.currentThread().getName());
 
 						try {
 							createSchema(props);
@@ -135,6 +222,8 @@ public class JanusGraphClient extends DB{
 	public static void main(String[] args) throws DBException {
 		JanusGraphClient jclient = new JanusGraphClient();
 		jclient.init();
+		jclient.viewProfile(0, 0, new HashMap<>(), false, false);
+		jclient.listFriends(0, 0, null, new Vector<>(), false, false);
 	}
 
 	private void cleanupAllConnections() {
@@ -186,8 +275,10 @@ public class JanusGraphClient extends DB{
 	@Override
 	public void cleanup(boolean warmup) throws ExecutionException, InterruptedException {
 		try {
-			g.V().drop().iterate();
-			System.out.println("Graph database cleaned up.");
+			// cleanup all connections
+			cleanupAllConnections();
+//			g.V().drop().iterate();
+			logger.info("Graph database cleaned up.");
 
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -201,7 +292,7 @@ public class JanusGraphClient extends DB{
 			String schemaScript = new String(Files.readAllBytes(Paths.get("conf/schema.groovy")));
 			sharedClient.submit(schemaScript).all().get();
 
-			System.out.println("Schema successfully created!");
+			logger.info("Schema successfully created!");
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
@@ -222,7 +313,7 @@ public class JanusGraphClient extends DB{
 		ResultSet rs =null;
 
 		try {
-			if(entitySet.equalsIgnoreCase("resources")) {
+			if(entitySet.equalsIgnoreCase("main/resources")) {
 				return SUCCESS; // TODO: at this stage we don't add any resourse
 			}
 			GraphTraversal<Vertex, Vertex> traversal = g.addV(entitySet)
@@ -235,10 +326,10 @@ public class JanusGraphClient extends DB{
 				}
 			});
 			traversal.next();
-			System.out.println("inserted successfully");
+			logger.info("inserted successfully");
 			return SUCCESS;
 		} catch (Exception e) {
-			System.err.println("Error while inserting entity into graph: " + entitySet);
+			logger.severe("Error while inserting entity into graph: " + entitySet);
 			e.printStackTrace();
 			return ERROR;
 		}
@@ -246,93 +337,94 @@ public class JanusGraphClient extends DB{
 
 	@Override
 	public int inviteFriend(int inviterID, int inviteeID){
-		long timestamp = Instant.now().toEpochMilli(); // 毫秒级时间戳
-		Runnable operation = () -> {
-			g.V().hasLabel("users").has("userid", inviterID).as("inviter")
-					.V().hasLabel("users").has("userid", inviteeID).as("invitee")
-					.coalesce(__.select("inviter"), __.constant("Vertex with userid " + inviterID + " not found"))
-					.coalesce(__.select("invitee"), __.constant("Vertex with userid " + inviteeID + " not found"))
-					// if friendship edge exists and status is rejected
-					.sideEffect(
-							__.select("inviter")
-									.outE("friendship")
-									.where(__.inV().as("invitee"))
-									.has("status", "rejected")
-									.property("status", "pending")
-					)
-					// if friendship edge not exists
-					.choose(
-							__.select("inviter").outE("friendship").where(__.inV().as("invitee")),
-							__.identity(),
-							__.addE("friendship").from("inviter").to("invitee").property("status", "pending")
-					)
-					.iterate();
-
-			System.out.println("[" + timestamp + "] " + "Friend request sent from " + inviterID + " -> " + inviteeID + " [Thread id: " + Thread.currentThread().getId() + "]");
-		};
-
+		long timestamp = Instant.now().toEpochMilli();
+		String operationId = String.format("inviteFriend-%d-%d-%d", inviterID, inviteeID, timestamp);
+		DefaultLoggableOperation operation = new DefaultLoggableOperation(operationId, () -> {
+				g.V().hasLabel("users").has("userid", inviterID).as("inviter")
+						.V().hasLabel("users").has("userid", inviteeID).as("invitee")
+						.coalesce(__.select("inviter"), __.constant("Vertex with userid " + inviterID + " not found"))
+						.coalesce(__.select("invitee"), __.constant("Vertex with userid " + inviteeID + " not found"))
+						// if friendship edge exists and status is rejected
+						.sideEffect(
+								__.select("inviter")
+										.outE("friendship")
+										.where(__.inV().as("invitee"))
+										.has("status", "rejected")
+										.property("status", "pending")
+						)
+						// if friendship edge not exists
+						.choose(
+								__.select("inviter").outE("friendship").where(__.inV().as("invitee")),
+								__.identity(),
+								__.addE("friendship").from("inviter").to("invitee").property("status", "pending")
+						)
+						.iterate();
+		});
+		operation.addLog("[" + timestamp + "] " + "Friend request sent from " + inviterID + " -> " + inviteeID + " [Thread id: " + Thread.currentThread().getId() + "]");
 		return runWithRetry(operation);
 	}
 
 	@Override
 	public int CreateFriendship(int friendid1, int friendid2) {
-		Runnable operation = () -> {
-			long timestamp = Instant.now().toEpochMilli();
-			g.V().hasLabel("users").has("userid", friendid1).as("inviter")
-					.V().hasLabel("users").has("userid", friendid2).as("invitee")
-					.coalesce(__.select("inviter"), __.constant("Vertex with userid " + friendid1 + " not found"))
-					.coalesce(__.select("invitee"), __.constant("Vertex with userid " + friendid2 + " not found"))
-					.addE("friendship").from("inviter").to("invitee")
-					.property("status", "friend")
-					.iterate();
-
-			System.out.println("[" + timestamp + "] " + "Friendship established from " + friendid1 + " -> " + friendid2 + " [Thread id: " + Thread.currentThread().getId() + "]");
-		};
+		long timestamp = Instant.now().toEpochMilli();
+		String operationId = String.format("CreateFriendship-%d-%d-%d", friendid1, friendid2, timestamp);
+		DefaultLoggableOperation operation = new DefaultLoggableOperation(operationId, () -> {
+				g.V().hasLabel("users").has("userid", friendid1).as("inviter")
+						.V().hasLabel("users").has("userid", friendid2).as("invitee")
+						.coalesce(__.select("inviter"), __.constant("Vertex with userid " + friendid1 + " not found"))
+						.coalesce(__.select("invitee"), __.constant("Vertex with userid " + friendid2 + " not found"))
+						.addE("friendship").from("inviter").to("invitee")
+						.property("status", "friend")
+						.iterate();
+		});
+		operation.addLog("[" + timestamp + "] " + "Friendship established from " + friendid1 + " -> " + friendid2 + " [Thread id: " + Thread.currentThread().getId() + "]");
 		return runWithRetry(operation);
 	}
 
 	@Override
 	public int acceptFriend(int inviterID, int inviteeID) {
 		// change the status of inviter and invitee into confirmed.
-		Runnable operation = () -> {
-				long timestamp = Instant.now().toEpochMilli(); // 毫秒级时间戳
-				Long count = g.V().hasLabel("users").has("userid", inviterID)
+		long timestamp = Instant.now().toEpochMilli();
+		String operationId = String.format("acceptFriend-%d-%d-%d", inviterID, inviteeID, timestamp);
+		AtomicLong count = new AtomicLong(-1L);
+		DefaultLoggableOperation operation = new DefaultLoggableOperation(operationId, () -> {
+				count.set(g.V().hasLabel("users").has("userid", inviterID)
 						.outE("friendship").has("status", "pending")
 						.where(__.inV().hasLabel("users").has("userid", inviteeID))
 						.property("status", "friend")
 						.count()
-						.next();
-
-				if (count == 0) {
-					System.err.println("[" + timestamp + "] " + "Friendship accepted failed! From " + inviterID + " -> " + inviteeID + ". One or both vertices not found." + " [Thread id: " + Thread.currentThread().getId() + "]");
-				} else if (count == 1) {
-					System.out.println("[" + timestamp + "] " + "Friendship accepted from " + inviterID + " -> " + inviteeID + " [Thread id: " + Thread.currentThread().getId() + "]");
-				} else{
-					System.err.println("[" + timestamp + "] " + "Friendship accepted failed! From " + inviterID + " -> " + inviteeID + ". Multiple edges found." + " [Thread id: " + Thread.currentThread().getId() + "]");
-				}
-			};
+						.next());
+			});
+		if (count.get() == 0) {
+			operation.addLog("[" + timestamp + "] " + "Friendship accepted failed! From " + inviterID + " -> " + inviteeID + ". One or both vertices not found." + " [Thread id: " + Thread.currentThread().getId() + "]");
+		} else if (count.get() == 1) {
+			operation.addLog("[" + timestamp + "] " + "Friendship accepted from " + inviterID + " -> " + inviteeID + " [Thread id: " + Thread.currentThread().getId() + "]");
+		} else {
+			operation.addLog("[" + timestamp + "] " + "Friendship accepted failed! From " + inviterID + " -> " + inviteeID + ". Multiple edges found." + " [Thread id: " + Thread.currentThread().getId() + "]");
+		}
 		return runWithRetry(operation);
 	}
 
 	@Override
 	public int rejectFriend(int inviterID, int inviteeID) {
-		Runnable operation = () -> {
-				long timestamp = Instant.now().toEpochMilli();
-				Long count = g.V().hasLabel("users").has("userid", inviterID)
+		long timestamp = Instant.now().toEpochMilli();
+		String operationId = String.format("rejectFriend-%d-%d-%d", inviterID, inviteeID, timestamp);
+		AtomicLong count = new AtomicLong(-1L);
+		DefaultLoggableOperation operation = new DefaultLoggableOperation(operationId, () -> {
+				count.set(g.V().hasLabel("users").has("userid", inviterID)
 						.outE("friendship").has("status", "pending")
 						.where(__.inV().hasLabel("users").has("userid", inviteeID))
 						.property("status", "rejected")
 						.count()
-						.next();
-
-				if (count == 0) {
-					System.err.println("[" + timestamp + "] " + "Friendship rejected failed! From " + inviterID + " -> " + inviteeID + ". Didn't find any pending -> rejected edges" + " [Thread id: " + Thread.currentThread().getId() + "]");
-				} else if (count == 1) {
-					System.out.println("[" + timestamp + "] " + "Friendship rejected from " + inviterID + " -> " + inviteeID + " [Thread id: " + Thread.currentThread().getId() + "]");
-				} else{
-					System.err.println("[" + timestamp + "] " + "Friendship rejected failed! From " + inviterID + " -> " + inviteeID + ". Multiple edges found." + " [Thread id: " + Thread.currentThread().getId() + "]");
-				}
-			};
+						.next());
+			});
+		if (count.get() == 0) {
+			operation.addLog("[" + timestamp + "] " + "Friendship rejected failed! From " + inviterID + " -> " + inviteeID + ". Didn't find any pending -> rejected edges" + " [Thread id: " + Thread.currentThread().getId() + "]");
+		} else if (count.get() == 1) {
+			operation.addLog("[" + timestamp + "] " + "Friendship rejected from " + inviterID + " -> " + inviteeID + " [Thread id: " + Thread.currentThread().getId() + "]");
+		} else{
+			operation.addLog("[" + timestamp + "] " + "Friendship rejected failed! From " + inviterID + " -> " + inviteeID + ". Multiple edges found." + " [Thread id: " + Thread.currentThread().getId() + "]");
+		}
 		return runWithRetry(operation);
 	}
 
@@ -340,18 +432,22 @@ public class JanusGraphClient extends DB{
 	@Override
 	public int viewProfile(int requesterID, int profileOwnerID,
 						   HashMap<String, ByteIterator> result, boolean insertImage, boolean testMode) {
-			// get all the attributes
+		// get all the attributes
 		try {
 			long timestamp = Instant.now().toEpochMilli();
-			Map<String, Object> resultMap = g.V().hasLabel("users").has("userid", profileOwnerID)
-					.project("profile", "pendingFriendCount", "friendCount")
-					.by(__.valueMap())
-					.by(__.inE("friendship").has("status", "pending").count())
-					.by(__.bothE("friendship").has("status", "friend").count())
-					.tryNext().orElse(null);
+			GraphTraversalSource traversal = g.with("cache", cache);
+			List<Map<String, Object>> resultsList = runTraversalWithProfile(() ->
+							traversal.V().hasLabel("users").has("userid", profileOwnerID)
+									.project("profile", "pendingFriendCount", "friendCount")
+									.by(__.valueMap())
+									.by(__.inE("friendship").has("status", "pending").outV().count())
+									.by(__.bothE("friendship").has("status", "friend").otherV().count()),
+					showProfile
+			);
 
+			Map<String, Object> resultMap = resultsList.isEmpty() ? null : resultsList.get(0);
 			if (resultMap == null) {
-				System.out.println(profileOwnerID + " can't find anything");
+				logger.info(profileOwnerID + " can't find anything");
 				return SUCCESS;
 			}
 
@@ -369,7 +465,7 @@ public class JanusGraphClient extends DB{
 
 			result.put("pendingcount", new StringByteIterator(String.valueOf(pendingFriendCount)));
 			result.put("friendcount", new StringByteIterator(String.valueOf(friendCount)));
-			System.out.println("[" + timestamp + "] " + "View Profile: " + "userid: " + result.get("userid") +" pendingcount: " + result.get("pendingcount") +" friendcount: " + result.get("friendcount") + " [Thread id: " + Thread.currentThread().getId() + "]");
+			logger.info("[" + timestamp + "] " + "View Profile: " + "userid: " + result.get("userid") +" pendingcount: " + result.get("pendingcount") +" friendcount: " + result.get("friendcount") + " [Thread id: " + Thread.currentThread().getId() + "]");
 
 			return SUCCESS;
 		} catch (Exception e) {
@@ -380,16 +476,17 @@ public class JanusGraphClient extends DB{
 
 	@Override
 	public int thawFriendship(int friendid1, int friendid2) {
-		Runnable operation = () -> {
-			long timestamp = Instant.now().toEpochMilli();
+		long timestamp = Instant.now().toEpochMilli();
+		String operationId = String.format("rejectFriend-%d-%d-%d", friendid1, friendid2, timestamp);
+		DefaultLoggableOperation operation = new DefaultLoggableOperation(operationId, () -> {
 				g.V().hasLabel("users").has("userid", friendid1)
 						.bothE("friendship")
 						.has("status", "friend")
 						.where(__.otherV().hasLabel("users").has("userid", friendid2))
 						.drop()
 						.iterate();
-				System.out.println("[" + timestamp + "] " + "Friendship thawed from " + friendid1 + " -> " + friendid2 + " [Thread id: " + Thread.currentThread().getId() + "]");
-			};
+				});
+		operation.addLog("[" + timestamp + "] " + "Friendship thawed from " + friendid1 + " -> " + friendid2 + " [Thread id: " + Thread.currentThread().getId() + "]");
 		return runWithRetry(operation);
 	}
 
@@ -402,39 +499,39 @@ public class JanusGraphClient extends DB{
 			return ERROR;
 		try {
 			long timestamp = Instant.now().toEpochMilli();
-			List<Map<Object, Object>> friends = g.V().hasLabel("users").has("userid", profileOwnerID)
-					.bothE("friendship").has("status", "friend") // 获取已建立好友关系的边
-					.otherV()
-					.valueMap()
-					.toList();
+			GraphTraversalSource traversal = g.with("cache", cache);
+			List<Map<Object, Object>> friends;
+
+			if (fields != null && fields.size() > 0) {
+				friends = runTraversalWithProfile(() ->
+								traversal.V().hasLabel("users").has("userid", profileOwnerID)
+										.bothE("friendship").has("status", "friend")
+										.otherV()
+										.valueMap(fields.toArray(new String[0])),
+						showProfile
+				);
+			} else {
+				friends = runTraversalWithProfile(() ->
+								traversal.V().hasLabel("users").has("userid", profileOwnerID)
+										.bothE("friendship").has("status", "friend")
+										.otherV()
+										.valueMap("userid", "fname", "lname"),
+						showProfile
+				);
+			}
 
 			for (Map<Object, Object> friendData : friends) {
 				HashMap<String, ByteIterator> friendMap = new HashMap<>();
-
-				if (fields != null) {
-					for (String field : fields) {
-						if (friendData.containsKey(field)) {
-							Object value = friendData.get(field);
-							if (value instanceof List && !((List<?>) value).isEmpty()) {
-								friendMap.put(field, new StringByteIterator(((List<?>) value).get(0).toString()));
-							}
-						}
+				friendData.forEach((key, value) -> {
+					if (value instanceof List<?> && !((List<?>) value).isEmpty()) {
+						friendMap.put(key.toString(), new StringByteIterator(((List<?>) value).get(0).toString()));
 					}
-				} else {
-					friendData.forEach((key, value) -> {
-						if (key instanceof String && value instanceof List) {
-							List<?> valueList = (List<?>) value;
-							if (!valueList.isEmpty()) {
-								friendMap.put((String) key, new StringByteIterator(valueList.get(0).toString()));
-							}
-						}
-					});
-				}
+				});
 				result.add(friendMap);
 			}
-			System.out.println("[" + timestamp + "] " + "View confirmed friendship, userid:" + profileOwnerID + " result: " + result.size() + " [Thread id: " + Thread.currentThread().getId() + "]");
 
-
+			logger.info("[" + timestamp + "] " + "View confirmed friendship, userid:" + profileOwnerID +
+					" result: " + result.size() + " [Thread id: " + Thread.currentThread().getId() + "]");
 			return SUCCESS;
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -447,11 +544,14 @@ public class JanusGraphClient extends DB{
 		// gets the list of pending friend requests for a member.
 		try {
 			long timestamp = Instant.now().toEpochMilli();
-			List<Map<Object, Object>> pendingRequests = g.V().hasLabel("users").has("userid", profileOwnerID)
-					.inE("friendship").has("status", "pending") // 获取请求加好友的入边
-					.outV()
-					.valueMap()
-					.toList();
+			GraphTraversalSource traversal = g.with("cache", cache);
+			List<Map<Object, Object>> pendingRequests = runTraversalWithProfile(() ->
+							traversal.V().hasLabel("users").has("userid", profileOwnerID)
+									.inE("friendship").has("status", "pending")
+									.outV()
+									.valueMap("userid", "fname", "lname"),
+					showProfile
+			);
 
 			for (Map<Object, Object> friendData : pendingRequests) {
 				HashMap<String, ByteIterator> friendMap = new HashMap<>();
@@ -465,7 +565,7 @@ public class JanusGraphClient extends DB{
 				});
 				results.add(friendMap);
 			}
-			System.out.println("[" + timestamp + "] " + "View pending friendship, userid:" + profileOwnerID + " result: " + results.size() + " [Thread id: " + Thread.currentThread().getId() + "]");
+			logger.info("[" + timestamp + "] " + "View pending friendship, userid:" + profileOwnerID + " result: " + results.size() + " [Thread id: " + Thread.currentThread().getId() + "]");
 
 			return SUCCESS;
 		} catch (Exception e) {
@@ -478,7 +578,8 @@ public class JanusGraphClient extends DB{
 	@Override
 	public int queryPendingFriendshipIds(int inviteeid, Vector<Integer> pendingIds){
 		try {
-			List<Object> pendingUserIds = g.V().hasLabel("users").has("userid", inviteeid)
+			GraphTraversalSource traversal = g.with("cache", cache);
+			List<Object> pendingUserIds = traversal.V().hasLabel("users").has("userid", inviteeid)
 					.inE("friendship").has("status", "pending")
 					.outV().values("userid")
 					.toList();
@@ -497,7 +598,8 @@ public class JanusGraphClient extends DB{
 	@Override
 	public int queryConfirmedFriendshipIds(int profileId, Vector<Integer> confirmedIds){
 		try {
-			List<Object> confirmedUserIds = g.V().hasLabel("users").has("userid", profileId)
+			GraphTraversalSource traversal = g.with("cache", cache);
+			List<Object> confirmedUserIds = traversal.V().hasLabel("users").has("userid", profileId)
 					.inE("friendship").has("status", "friend")
 					.outV().values("userid")
 					.toList();

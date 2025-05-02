@@ -19,35 +19,8 @@
 
 package edu.usc.bg.base;
 
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.PrintWriter;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.text.DateFormat;
-import java.text.DecimalFormat;
-import java.text.SimpleDateFormat;
-import java.util.*;
-import java.util.Map.Entry;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.atomic.AtomicInteger;
-
 import com.mitrallc.sql.KosarSoloDriver;
-
-//import kosar.AsyncSocketServer;
-//import kosar.CoreClient;
-import edu.usc.bg.BGMainClass;
-import edu.usc.bg.Distribution;
-import edu.usc.bg.KillThread;
-import edu.usc.bg.MonitoringThread;
-import edu.usc.bg.Worker;
+import edu.usc.bg.*;
 import edu.usc.bg.generator.Fragmentation;
 import edu.usc.bg.measurements.MyMeasurement;
 import edu.usc.bg.measurements.StatsPrinter;
@@ -56,9 +29,18 @@ import edu.usc.bg.server.ClientInfo;
 import edu.usc.bg.server.RequestHandler;
 import edu.usc.bg.validator.ValidationMainClass;
 import edu.usc.bg.workloads.CoreWorkload;
-import edu.usc.bg.workloads.ResourceWorkload;
-import edu.usc.bg.workloads.UserWorkload;
 import edu.usc.bg.workloads.loadActiveThread;
+
+import java.io.*;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.text.DateFormat;
+import java.text.DecimalFormat;
+import java.text.SimpleDateFormat;
+import java.util.*;
+import java.util.Map.Entry;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 class CustomWarmupThread extends Thread{
 	DB db;
@@ -157,8 +139,10 @@ class VisualizationThread extends Thread {
 		serverPort=port;
 		try {
 			serverSocket = new ServerSocket(serverPort);
+			System.out.println("Server started on port: " + serverPort);
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
+			System.out.println("Failed to start");
 			e.printStackTrace();
 		}
 
@@ -190,14 +174,15 @@ class VisualizationThread extends Thread {
 
 				//				clientSocket =new SocketIO(serverSocket.accept());
 
-				this.threadPool.execute( new WorkerRunnable(clientSocket,status));
+				this.threadPool.execute(new WorkerRunnable(clientSocket,status));
 			} catch (IOException e) {
-
+				System.out.println(e);
 				System.out.println("Closing Visualization thread socket");
 			}
 		}
 		//stopServer();
 		this.threadPool.shutdown();
+		System.out.println("Satisfying perc: " + MyMeasurement.getSatisfyingPerc());
 		System.out.println("Visualization thread has Stopped...") ;
 
 	}
@@ -228,7 +213,13 @@ class WorkerRunnable implements Runnable{
 			int len = (((lenBytes[3] & 0xff) << 24) | ((lenBytes[2] & 0xff) << 16) |
 					((lenBytes[1] & 0xff) << 8) | (lenBytes[0] & 0xff));
 			byte[] receivedBytes = new byte[len];
-			is.read(receivedBytes, 0, len);
+			int bytesRead = 0;
+			while (bytesRead < len) {
+				int result = is.read(receivedBytes, bytesRead, len - bytesRead);
+				if (result == -1) break;
+				bytesRead += result;
+			}
+
 			msg = new String(receivedBytes, 0, len);
 			//InputStream input  = clientSocket.getInputStream();
 			//OutputStream output = clientSocket.getOutputStream();
@@ -286,7 +277,8 @@ class WorkerRunnable implements Runnable{
 			if (i==0)
 				i=1;
 			String data="GetData"+separator+ numSocilites.get()+ separator + (int)status.curactthroughput + separator + (int)total/i + separator + (int)MyMeasurement.getSatisfyingPerc();
-			sendResponse(data);
+			System.out.println("Socialites | actions | response time | percentage");
+			System.out.println(data);
 		}
 
 		else if (msg.contains("SetConfidence"))
@@ -545,14 +537,14 @@ public class Client {
 	public static final String FRIENDSHIP_COUNT_PROPERTY = "friendcountperuser";
 	public static final String FRIENDSHIP_COUNT_PROPERTY_DEFAULT = "0";
 	public static final String CONFPERC_COUNT_PROPERTY = "confperc";
+	// needed when rating is happening
 	public static final String RATING_MODE_PROPERTY = "ratingmode";
 	public static final String RATING_MODE_PROPERTY_DEFAULT = "false";
-	// needed when rating is happening
 	public static final String EXPECTED_LATENCY_PROPERTY = "expectedlatency";
-	public static final String EXPECTED_LATENCY_PROPERTY_DEFAULT = "1.3";
+	public static final String EXPECTED_LATENCY_PROPERTY_DEFAULT = "0.01";
 	public static final String EXPECTED_AVAILABILITY_PROPERTY = "expectedavailability"; // for
-	// freshness
 	public static final String EXPECTED_AVAILABILITY_PROPERTY_DEFAULT = "1.3";
+	// freshness
 	public static final String EXPORT_FILE_PROPERTY = "exportfile";
 	public static final String FEED_LOAD_PROPERTY = "feedload";
 	public static final String FEED_LOAD_DEFAULT_PROPERTY = "false";
@@ -1034,7 +1026,7 @@ public class Client {
 						benchmarkStats.getFreshnessConfidence());
 
 			//}// if benchmarkStats not null
-
+			System.out.println("[SatisfyingPerc] " + MyMeasurement.getSatisfyingPerc());
 			printer.write(MyMeasurement.getFinalResults());
 			// Needed in case you want to print out frequency related stats
 			printer.write(CoreWorkload.getFrequecyStats().toString());
@@ -2145,7 +2137,7 @@ public class Client {
 
 		StatusThread statusthread = null;
 
-
+		System.out.println("status:" + status);
 		if (status) {
 			statusthread = new StatusThread(threads, workload);
 		}
@@ -2159,8 +2151,9 @@ public class Client {
 		}
 
 		// visual
-		VisualizationThread visual= new VisualizationThread(Client.visualizerPort+Client.machineid,statusthread);
+		VisualizationThread visual= new VisualizationThread(Client.visualizerPort,statusthread);
 		visual.start();
+		System.out.println("Visualizer Port: " + Client.visualizerPort);
 		//if(simType.equalsIgnoreCase("closed")){
 		Thread terminator = null;
 
@@ -3026,7 +3019,20 @@ public class Client {
 				// parameter for validation thread
 				argIndex++;
 				props.setProperty("threadcount",args[argIndex]);
-			} else if (args[argIndex].compareTo("-loadindex") == 0) {
+			} else if (args[argIndex].compareTo("-latency") == 0) {
+				// parameter for validation thread
+				argIndex++;
+				props.setProperty(EXPECTED_LATENCY_PROPERTY,args[argIndex]);
+			} else if (args[argIndex].compareTo("-maxexecutiontime") == 0) {
+				// parameter for executiontime
+				argIndex++;
+				props.setProperty(MAX_EXECUTION_TIME,args[argIndex]);
+			} else if (args[argIndex].compareTo("-doCache") == 0) {
+				// parameter for docache for janusgraph, true or false
+				argIndex++;
+				props.setProperty("doCache",args[argIndex]);
+			}
+			else if (args[argIndex].compareTo("-loadindex") == 0) {
 				inputArguments[dotransactions] = false;
 				inputArguments[doIndex] = true;
 			} else if (args[argIndex].compareTo("-loadfriends") == 0) {
