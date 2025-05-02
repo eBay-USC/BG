@@ -16,88 +16,88 @@
     </path>
 
     <target name="dbcompile-gemfire" depends="compile">
-        <property name="db.dir" value="db/gemfire" />
+        <property name="db.dir" value="src/main/java/db/gemfire" />
         <antcall target="dbcompile" />
     </target>
 
     <target name="dbcompile-infinispan-5.0" depends="compile">
-        <property name="db.dir" value="db/infinispan-5.0" />
+        <property name="db.dir" value="src/main/java/db/infinispan-5.0" />
         <antcall target="dbcompile" />
     </target>
 
     <target name="dbcompile-cassandra-0.5" depends="compile">
-      <property name="db.dir" value="db/cassandra-0.5"/>
+      <property name="db.dir" value="src/main/java/db/cassandra-0.5"/>
       <antcall target="dbcompile"/>
     </target>
 
     <target name="dbcompile-janusgraph" depends="compile">
-        <property name="db.dir" value="db/JanusGraph"/>
+        <property name="db.dir" value="src/main/java/db/JanusGraph"/>
         <antcall target="dbcompile"/>
     </target>
 
     <target name="dbcompile-cassandra-0.6" depends="compile">
-        <property name="db.dir" value="db/cassandra-0.6"/>
+        <property name="db.dir" value="src/main/java/db/cassandra-0.6"/>
         <antcall target="dbcompile"/>
     </target>
 
     <target name="dbcompile-cassandra-0.7" depends="compile">
-        <property name="db.dir" value="db/cassandra-0.7"/>
+        <property name="db.dir" value="src/main/java/db/cassandra-0.7"/>
         <antcall target="dbcompile"/>
     </target>
 
     <target name="dbcompile-cassandra-0.8" depends="compile">
-        <property name="db.dir" value="db/cassandra-0.8"/>
+        <property name="db.dir" value="src/main/java/db/cassandra-0.8"/>
         <antcall target="dbcompile"/>
     </target>
 
     <target name="dbcompile-cassandra-1.0.6" depends="compile">
-        <property name="db.dir" value="db/cassandra-1.0.6"/>
+        <property name="db.dir" value="src/main/java/db/cassandra-1.0.6"/>
         <antcall target="dbcompile"/>
     </target>
 
     <target name="dbcompile-hbase" depends="compile">
-        <property name="db.dir" value="db/hbase"/>
+        <property name="db.dir" value="src/main/java/db/hbase"/>
         <antcall target="dbcompile"/>
     </target>
 
     <target name="dbcompile-mongodb" depends="compile">
-        <property name="db.dir" value="db/MongoDB"/>
+        <property name="db.dir" value="src/main/java/db/MongoDB"/>
         <antcall target="dbcompile"/>
     </target>
 
     <target name="dbcompile-voldemort" depends="compile">
-        <property name="db.dir" value="db/voldemort"/>
+        <property name="db.dir" value="src/main/java/db/voldemort"/>
         <antcall target="dbcompile"/>
     </target>
 
     <target name="dbcompile-test" depends="compile">
-        <property name="db.dir" value="db/BGVerifyCorrectness"/>
+        <property name="db.dir" value="src/main/java/db/BGVerifyCorrectness"/>
         <antcall target="dbcompile"/>
     </target>
 
     <target name="dbcompile-simple" depends="compile">
-        <property name="db.dir" value="db/simple"/>
+        <property name="db.dir" value="src/main/java/db/simple"/>
         <antcall target="dbcompile"/>
     </target>
 
 
     <target name="dbcompile-jdbc" depends="compile">
-        <property name="db.dir" value="db/jdbc"/>
+        <property name="db.dir" value="src/main/java/db/jdbc"/>
         <antcall target="dbcompile"/>
     </target>
 
     <target name="dbcompile-redis" depends="compile">
-        <property name="db.dir" value="db/redis"/>
+        <property name="db.dir" value="src/main/java/db/redis"/>
         <antcall target="dbcompile"/>
     </target>
 
     <target name="dbcompile-mapkeeper" depends="compile">
-        <property name="db.dir" value="db/mapkeeper"/>
+        <property name="db.dir" value="src/main/java/db/mapkeeper"/>
         <antcall target="dbcompile"/>
     </target>
 
     <target name="dbcompile-nosqldb" depends="compile">
-        <property name="db.dir" value="db/nosqldb"/>
+        <property name="db.dir" value="src/main/java/db/nosqldb"/>
         <antcall target="dbcompile"/>
     </target>
 
