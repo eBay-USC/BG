@@ -176,7 +176,7 @@ public class JanusGraphClient extends DB{
 		// todo: reload everything
 		props = getProperties();
 		cache = Boolean.parseBoolean(props.getProperty("doCache", "true"));
-		String janusGraphIp = props.getProperty("janusGraphIp", "127.0.0.1");
+		String janusGraphIp = props.getProperty("janusGraphIp", "128.110.96.75");
 		logger.setLevel(Level.WARNING);
 		if (!initialized) {
 			synchronized (INIT_LOCK) {
@@ -199,6 +199,7 @@ public class JanusGraphClient extends DB{
 
 						sharedClient = cluster.connect();
 						sharedG = traversal().withRemote(DriverRemoteConnection.using(cluster));
+						System.out.println("connected successfully in thread " + Thread.currentThread().getName());
 						logger.info("connected successfully in thread " + Thread.currentThread().getName());
 
 						try {
@@ -483,13 +484,13 @@ public class JanusGraphClient extends DB{
 		long timestamp = Instant.now().toEpochMilli();
 		String operationId = String.format("rejectFriend-%d-%d-%d", friendid1, friendid2, timestamp);
 		DefaultLoggableOperation operation = new DefaultLoggableOperation(operationId, () -> {
-				g.V().hasLabel("users").has("userid", friendid1)
-						.bothE("friendship")
-						.has("status", "friend")
-						.where(__.otherV().hasLabel("users").has("userid", friendid2))
-						.drop()
-						.iterate();
-				});
+			g.V().hasLabel("users").has("userid", friendid1)
+					.bothE("friendship")
+					.has("status", "friend")
+					.where(__.otherV().hasLabel("users").has("userid", friendid2))
+					.drop()
+					.iterate();
+		});
 		operation.addLog("[" + timestamp + "] " + "Friendship thawed from " + friendid1 + " -> " + friendid2 + " [Thread id: " + Thread.currentThread().getId() + "]");
 		return runWithRetry(operation);
 	}
@@ -613,10 +614,10 @@ public class JanusGraphClient extends DB{
 			}
 
 			return SUCCESS;
-	} catch (Exception e) {
-		e.printStackTrace();
-		return ERROR;
-	}
+		} catch (Exception e) {
+			e.printStackTrace();
+			return ERROR;
+		}
 	}
 
 
