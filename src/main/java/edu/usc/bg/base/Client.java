@@ -19,7 +19,6 @@
 
 package edu.usc.bg.base;
 
-//import com.mitrallc.sql.KosarSoloDriver;
 import edu.usc.bg.*;
 import edu.usc.bg.generator.Fragmentation;
 import edu.usc.bg.measurements.MyMeasurement;
@@ -453,7 +452,7 @@ class StatusThread extends Thread {
 
 			// terminate this thread when all the worker threads are done
 			for (Thread t : _threads) {
-				if (t.getState() != Thread.State.TERMINATED) {
+				if (t.getState() != State.TERMINATED) {
 					alldone = false;
 				}
 
@@ -3031,6 +3030,10 @@ public class Client {
 				// parameter for docache for janusgraph, true or false
 				argIndex++;
 				props.setProperty("doCache",args[argIndex]);
+			} else if (args[argIndex].compareTo("-janusGraphIp") == 0) {
+				// parameter for docache for janusgraph, true or false
+				argIndex++;
+				props.setProperty("janusGraphIp",args[argIndex]);
 			}
 			else if (args[argIndex].compareTo("-loadindex") == 0) {
 				inputArguments[dotransactions] = false;

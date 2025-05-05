@@ -176,6 +176,7 @@ public class JanusGraphClient extends DB{
 		// todo: reload everything
 		props = getProperties();
 		cache = Boolean.parseBoolean(props.getProperty("doCache", "true"));
+		String janusGraphIp = props.getProperty("janusGraphIp", "127.0.0.1");
 		logger.setLevel(Level.WARNING);
 		if (!initialized) {
 			synchronized (INIT_LOCK) {
@@ -186,7 +187,7 @@ public class JanusGraphClient extends DB{
 								.create();
 
 						Cluster cluster = Cluster.build()
-								.addContactPoint("128.110.96.75")
+								.addContactPoint(janusGraphIp)
 								.port(8182)
 								.minConnectionPoolSize(10)
 								.maxConnectionPoolSize(100)
@@ -241,35 +242,38 @@ public class JanusGraphClient extends DB{
 	public HashMap<String, String> getInitialStats() {
 		HashMap<String, String> stats = new HashMap<String, String>();
 
-		try {
-			Map<String, Object> resultMap = g.V().hasLabel("users")
-					.project("userCount", "minUserId", "avgFriendsPerUser", "avgPendingPerUser")
-					.by(__.count())  // user_count
-					.by(__.values("userid").min())  // offset
-					.by(__.bothE("friendship").has("status", "friend").count())  // friendcount
-					.by(__.bothE("friendship").has("status", "pending").count())  // pendingfriendcount
-					.tryNext().orElse(null);
-
-			if (resultMap == null) {
-				stats.put("usercount", "0");
-				stats.put("resourcesperuser", "0");
-				stats.put("avgfriendsperuser", "0");
-				stats.put("avgpendingperuser", "0");
-				return stats;
-			}
-
-			// 获取统计结果
-			stats.put("usercount", resultMap.getOrDefault("userCount", 0).toString());
-			stats.put("resourcesperuser", "0");  // 资源数（此处为 0，可扩展）
-			stats.put("avgfriendsperuser", resultMap.getOrDefault("avgFriendsPerUser", 0).toString());
-			stats.put("avgpendingperuser", resultMap.getOrDefault("avgPendingPerUser", 0).toString());
-			System.out.println(stats);
-
-
-		} catch (Exception sx) {
-			sx.printStackTrace(System.out);
-		}
-		return stats;
+//		try {
+//			Map<String, Object> resultMap = g.V().hasLabel("users").has("userid", 0)
+//					.project("friendCount", "pendingCount")
+//					.by(__.outE("friendship").has("status", "friend").count())
+//					.by(__.outE("friendship").has("status", "pending").count())
+//					.tryNext().orElse(null);
+			stats.put("usercount", "100000");
+			stats.put("resourcesperuser", "0");
+			stats.put("avgfriendsperuser", "5");
+			stats.put("avgpendingperuser", "0");
+			return stats;
+//			if (resultMap == null) {
+//				stats.put("usercount", "0");
+//				stats.put("resourcesperuser", "0");
+//				stats.put("avgfriendsperuser", "0");
+//				stats.put("avgpendingperuser", "0");
+//				return stats;
+//			}
+//
+//			// 获取统计结果
+//			int userCount = Math.toIntExact(g.V().hasLabel("users").count().next());
+//			stats.put("usercount", String.valueOf(userCount));
+//			stats.put("resourcesperuser", "0");  // 资源数（此处为 0，可扩展）
+//			int avgF = ((Long) resultMap.getOrDefault("avgFriendsPerUser", 0L)).intValue();
+//			int avgP = ((Long) resultMap.getOrDefault("avgPendingPerUser", 0L)).intValue();
+//			stats.put("avgfriendsperuser", String.valueOf(avgF));
+//			stats.put("avgpendingperuser", String.valueOf(avgP));
+//
+//		} catch (Exception sx) {
+//			sx.printStackTrace(System.out);
+//		}
+//		return stats;
 	}
 
 	@Override

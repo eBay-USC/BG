@@ -1,6 +1,5 @@
 package db.JanusGraph.src.janusgraph;
 
-import java.util.ArrayList;
 import java.util.List;
 
 public interface LoggableOperation extends Runnable {
